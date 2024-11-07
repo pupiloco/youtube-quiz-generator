@@ -1,3 +1,25 @@
+// Validation function
+async function validateVideo() {
+    // Check if video is available
+    const videoElement = document.querySelector('video');
+    if (!videoElement) {
+        throw new Error('No video found on this page');
+    }
+
+    // Check if video is loaded
+    if (videoElement.readyState === 0) {
+        throw new Error('Video is not loaded yet');
+    }
+
+    // Check for video title
+    const titleElement = document.querySelector('h1.ytd-video-primary-info-renderer');
+    if (!titleElement || !titleElement.textContent.trim()) {
+        throw new Error('Could not find video title');
+    }
+
+    return true;
+}
+
 async function getTranscript() {
     // First try the "..." menu method
     try {
@@ -140,53 +162,100 @@ async function generateQuestionsWithGemini(transcript, videoTitle, apiKey) {
         : transcript;
 
     const prompt = `
-        You are a quiz generator for YouTube videos. Generate 5 multiple choice questions based on this video content:
-        
-        Title: ${videoTitle}
-        
-        Content: ${truncatedTranscript}
-        
-        Create challenging but fair questions that test understanding of the main concepts discussed.
-        Even if the content is limited, try to generate meaningful questions about the topic.
-        Format your response as a JSON array of question objects with this exact structure:
+        Generate exactly 5 multiple choice questions based on this YouTube video content.
+        Format your response as a JSON array that strictly follows this structure:
         [
             {
-                "question": "Question text here?",
-                "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+                "question": "Specific question based on the video content?",
+                "options": [
+                    "First option with the correct answer",
+                    "Second incorrect option",
+                    "Third incorrect option",
+                    "Fourth incorrect option"
+                ],
                 "correct": 0
             }
         ]
-        
-        The "correct" field should be the index (0-3) of the correct answer in the options array.
-        Return only the JSON array, no other text.
+
+        Rules:
+        1. Use actual content from the video, not generic questions
+        2. Make sure each question has exactly 4 options
+        3. Make the incorrect options plausible but clearly wrong
+        4. The "correct" field must be the index (0-3) of the correct answer
+        5. Return ONLY the JSON array, no additional text or explanations
+        6. Options should be complete phrases, not placeholders
+        7. Questions should test understanding of specific details from the video
+
+        Video Title: ${videoTitle}
+        Video Content: ${truncatedTranscript}
     `;
 
-    const response = await fetch(`${API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{ text: prompt }]
-            }]
-        })
-    });
-
-    if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
     try {
-        const questionsText = data.candidates[0].content.parts[0].text;
-        return JSON.parse(questionsText);
+        const response = await fetch(`${API_URL}?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    temperature: 0.7,
+                    topK: 40,
+                    topP: 0.95,
+                    maxOutputTokens: 1024,
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        try {
+            const questionsText = data.candidates[0].content.parts[0].text;
+            // Clean up the response to ensure it's valid JSON
+            const cleanedText = questionsText.trim().replace(/```json\n?|\n?```/g, '');
+            const questions = JSON.parse(cleanedText);
+
+            // Validate the response format
+            if (!Array.isArray(questions) || questions.length !== 5) {
+                throw new Error('Invalid response format: expected array of 5 questions');
+            }
+
+            // Validate each question
+            questions.forEach((q, i) => {
+                if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || typeof q.correct !== 'number') {
+                    throw new Error(`Invalid question format at index ${i}`);
+                }
+            });
+
+            return questions;
+        } catch (error) {
+            console.error('Parse error:', error);
+            // Fallback response if parsing fails
+            return [
+                {
+                    question: "What is the main topic of this video?",
+                    options: [
+                        videoTitle,
+                        "Unrelated topic 1",
+                        "Unrelated topic 2",
+                        "Unrelated topic 3"
+                    ],
+                    correct: 0
+                }
+            ];
+        }
     } catch (error) {
-        throw new Error('Failed to parse AI response: ' + error.message);
+        throw new Error('Failed to generate questions: ' + error.message);
     }
 }
 
 async function generateQuizContent(apiKey) {
     try {
+        await validateVideo();
         const transcript = await getTranscript();
         if (!transcript) {
             return { error: 'Could not find video content' };
@@ -194,6 +263,11 @@ async function generateQuizContent(apiKey) {
         
         const videoTitle = document.querySelector('h1.ytd-video-primary-info-renderer')?.textContent?.trim();
         const questions = await generateQuestionsWithGemini(transcript, videoTitle, apiKey);
+        
+        // Validate questions before returning
+        if (!questions || !Array.isArray(questions) || questions.length === 0) {
+            return { error: 'Failed to generate valid questions' };
+        }
         
         return { questions };
     } catch (error) {
