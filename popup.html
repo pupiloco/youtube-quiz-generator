@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>YouTube Quiz Generator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 340px;
+      padding: 16px;
+      font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+      background: #fafafa;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .app-title {
+      font-size: 18px;
+      color: #030303;
+      font-weight: 500;
+    }
+
+    .api-section {
+      padding: 16px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: none;
+      border: 1px solid #e5e5e5;
+    }
+
+    .api-section.show {
+      display: block;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 6px;
+      color: #606060;
+      font-size: 14px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.1);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    #generate-quiz {
+      background: #ff0000;
+      color: white;
+    }
+
+    #generate-quiz:hover {
+      background: #d90000;
+    }
+
+    #save-key {
+      background: #1a73e8;
+      color: white;
+    }
+
+    #save-key:hover {
+      background: #1557b0;
+    }
+
+    button:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .settings-icon {
+      width: 20px;
+      height: 20px;
+      fill: #606060;
+    }
+
+    .settings-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      width: 36px;
+      height: 36px;
+      padding: 8px;
+      color: #606060;
+      border-radius: 50%;
+    }
+
+    .settings-button:hover {
+      background: #f0f0f0;
+      transform: none;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      margin: 10px 0;
+      color: #606060;
+      font-size: 14px;
+    }
+
+    .loading.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .loading::after {
+      content: "";
+      width: 16px;
+      height: 16px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #ff0000;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .error {
+      color: #d32f2f;
+      font-size: 14px;
+      margin: 8px 0;
+      display: none;
+      padding: 8px 12px;
+      background: #ffebee;
+      border-radius: 8px;
+    }
+
+    .quiz-container {
+      margin-top: 16px;
+    }
+
+    .question {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      border: 1px solid #e5e5e5;
+    }
+
+    .question p {
+      margin-bottom: 12px;
+      color: #030303;
+    }
+
+    .options label {
+      display: block;
+      padding: 10px 12px;
+      margin: 8px 0;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid #e5e5e5;
+      transition: all 0.2s;
+    }
+
+    .options label:hover {
+      background: #f8f9fa;
+      border-color: #1a73e8;
+    }
+
+    .options input[type="radio"] {
+      margin-right: 8px;
+    }
+
+    .results {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+
+    .results h3 {
+      color: #030303;
+      margin-bottom: 12px;
+    }
+
+    .feedback > div {
+      margin: 12px 0;
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e5e5e5;
+    }
+
+    .correct-answer {
+      color: #2e7d32;
+      font-weight: 500;
+    }
+
+    .incorrect-answer {
+      color: #d32f2f;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="app-header">
+      <h1 class="app-title">YouTube Quiz Generator</h1>
+      <button class="settings-button" id="show-settings">
+        <svg class="settings-icon" viewBox="0 0 24 24">
+          <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="api-section" id="api-section">
+      <div class="input-group">
+        <label for="api-key">Gemini API Key</label>
+        <input type="text" id="api-key" placeholder="Enter your API key">
+      </div>
+      <button id="save-key">Save API Key</button>
+    </div>
+    <button id="generate-quiz">Generate Quiz</button>
+    <div id="loading" class="loading">Generating quiz...</div>
+    <div id="error" class="error"></div>
+    <div id="quiz-container" class="quiz-container"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
